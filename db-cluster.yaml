@@ -20,9 +20,6 @@ Parameters:
   DbUserName:
     Type: String
     Default: "nextclouddb"
-#  DbPassword:
-#    Type: String
-#    NoEcho: True
   DbName:
     Type: String
     Default: "nextclouddb"
@@ -31,15 +28,10 @@ Parameters:
     Default: "nextcloudcluster"
   DbMinCapacity:
     Type: Number
-    Default: '2'
+    Default: '0.5'
   DbMaxCapacity:
     Type: Number
     Default: '8'
- # PrivateSubnets:
- #   Type: String
- #   Default: !ImportValue VpcStack.Outputs.PrivateSubnets
- # VpcId:
- #   Type: String
   FargateSecGroupId:
     Type: String
     Default: 'sg-0f6ddbb66dc7ad7a0'
@@ -51,14 +43,12 @@ Resources:
     Properties:
       DBSubnetGroupDescription: description
       SubnetIds: !Split [',', !ImportValue 'x--v--x-prod-vpc-PrivateSubnets']
-      #'!Split [',', !Ref PrivateSubnets]
 
   PostgresRdsSecurityGroup:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
       GroupDescription: ECS Security Group
       VpcId: !ImportValue 'x--v--x-prod-vpc-VPC'
-      #!Ref VpcId
 
   PostgresRdsSecurityGroupPostgresInboundFargate:
     Type: 'AWS::EC2::SecurityGroupIngress'
@@ -79,7 +69,6 @@ Resources:
       DatabaseName: !Ref DbName
       DBClusterIdentifier: !Ref DbClusterName
       Engine: aurora-postgresql
-#      EngineMode: serverless
       EngineVersion: '14.6'
       Port: 5432
       ServerlessV2ScalingConfiguration:
