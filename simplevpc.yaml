@@ -20,48 +20,49 @@ Parameters:
   EnvironmentName:
     Description: An environment name that is prefixed to resource names
     Type: String
-    Default: nextcloud
+    Default: x--v--x
 
   VpcCIDR:
     Description: Please enter the IP range (CIDR notation) for this VPC
     Type: String
-    Default: 10.192.0.0/16
+    Default: 10.0.0.0/24
 
   PublicSubnet1CIDR:
     Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
     Type: String
-    Default: 10.192.10.0/24
+    Default: 10.0.0.0/28
 
   PublicSubnet2CIDR:
     Description: Please enter the IP range (CIDR notation) for the public subnet in the second Availability Zone
     Type: String
-    Default: 10.192.11.0/24
+    Default: 10.0.0.16/28
 
   PrivateSubnet1CIDR:
     Description: Please enter the IP range (CIDR notation) for the private subnet in the first Availability Zone
     Type: String
-    Default: 10.192.20.0/24
+    Default: 10.0.0.128/28
 
   PrivateSubnet2CIDR:
     Description: Please enter the IP range (CIDR notation) for the private subnet in the second Availability Zone
     Type: String
-    Default: 10.192.21.0/24
+    Default: 10.0.0.144/28
 
-  IsolationLevel:
-    Type: String
-    Default: Private
-    AllowedValues:
-    - PrivateHA
-    - Private
-    - Public
-
-Conditions:
-  PrivateSubnets: !Not [!Equals [!Ref IsolationLevel, Public]]
-  HASetup: !Equals [!Ref IsolationLevel, PrivateHA]
+#  IsolationLevel:
+#    Type: String
+#    Default: Private
+#    AllowedValues:
+#    - PrivateHA
+#    - Private
+#    - Public
+#
+#Conditions:
+#  PrivateSubnets: !Not [!Equals [!Ref IsolationLevel, Public]]
+#  HASetup: !Equals [!Ref IsolationLevel, PrivateHA]
 
 Resources:
   VPC:
     Type: AWS::EC2::VPC
+    DeletionPolicy: Retain
     Properties:
       CidrBlock: !Ref VpcCIDR
       EnableDnsSupport: true
@@ -72,6 +73,7 @@ Resources:
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
+    DeletionPolicy: Retain
     Properties:
       Tags:
       - Key: Name
@@ -84,7 +86,7 @@ Resources:
       VpcId: !Ref VPC
 
   S3GatewayEndpoint:
-    Condition: PrivateSubnets
+  #  Condition: PrivateSubnets
     Type: AWS::EC2::VPCEndpoint
     Properties:
       VpcId: !Ref VPC
@@ -97,6 +99,7 @@ Resources:
 
   PublicSubnet1:
     Type: AWS::EC2::Subnet
+    DeletionPolicy: Retain
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 0, !GetAZs '' ]
@@ -104,10 +107,11 @@ Resources:
       MapPublicIpOnLaunch: true
       Tags:
       - Key: Name
-        Value: !Sub ${EnvironmentName} Public Subnet (AZ1)
+        Value: !Sub ${EnvironmentName}_pub_1
 
   PublicSubnet2:
     Type: AWS::EC2::Subnet
+    DeletionPolicy: Retain
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 1, !GetAZs  '' ]
@@ -115,65 +119,74 @@ Resources:
       MapPublicIpOnLaunch: true
       Tags:
       - Key: Name
-        Value: !Sub ${EnvironmentName} Public Subnet (AZ2)
+        Value: !Sub ${EnvironmentName}_pub_2
 
   PrivateSubnet1:
     Type: AWS::EC2::Subnet
+    DeletionPolicy: Retain
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 0, !GetAZs  '' ]
       CidrBlock: !Ref PrivateSubnet1CIDR
+#      Ipv6CidrBlock: 2a05:d018:8e2:1080::/64
       MapPublicIpOnLaunch: false
       Tags:
       - Key: Name
-        Value: !Sub ${EnvironmentName} Private Subnet (AZ1)
+        Value: !Sub ${EnvironmentName}_priv_1
 
   PrivateSubnet2:
     Type: AWS::EC2::Subnet
+    DeletionPolicy: Retain
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 1, !GetAZs  '' ]
       CidrBlock: !Ref PrivateSubnet2CIDR
+#      Ipv6CidrBlock: 2a05:d018:8e2:1090::/64
       MapPublicIpOnLaunch: false
       Tags:
       - Key: Name
-        Value: !Sub ${EnvironmentName} Private Subnet (AZ2)
+        Value: !Sub ${EnvironmentName}_priv_2
 
   NatGateway1EIP:
-    Condition: PrivateSubnets
+  #  Condition: PrivateSubnets
     Type: AWS::EC2::EIP
+    DeletionPolicy: Retain
     DependsOn: InternetGatewayAttachment
     Properties:
       Domain: vpc
 
   NatGateway2EIP:
-    Condition: HASetup
+  #  Condition: HASetup
     Type: AWS::EC2::EIP
+    DeletionPolicy: Retain
     DependsOn: InternetGatewayAttachment
     Properties:
       Domain: vpc
 
   NatGateway1:
-    Condition: PrivateSubnets
+  #  Condition: PrivateSubnets
     Type: AWS::EC2::NatGateway
+    DeletionPolicy: Retain
     Properties:
       AllocationId: !GetAtt NatGateway1EIP.AllocationId
       SubnetId: !Ref PublicSubnet1
 
   NatGateway2:
-    Condition: HASetup
+  #  Condition: HASetup
     Type: AWS::EC2::NatGateway
+    DeletionPolicy: Retain
     Properties:
       AllocationId: !GetAtt NatGateway2EIP.AllocationId
       SubnetId: !Ref PublicSubnet2
 
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
+    DeletionPolicy: Retain
     Properties:
       VpcId: !Ref VPC
       Tags:
       - Key: Name
-        Value: !Sub ${EnvironmentName} Public Routes
+        Value: !Sub ${EnvironmentName}_pub_rt
 
   DefaultPublicRoute:
     Type: AWS::EC2::Route
@@ -185,12 +198,14 @@ Resources:
 
   PublicSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
+    DeletionPolicy: Retain
     Properties:
       RouteTableId: !Ref PublicRouteTable
       SubnetId: !Ref PublicSubnet1
 
   PublicSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
+    DeletionPolicy: Retain
     Properties:
       RouteTableId: !Ref PublicRouteTable
       SubnetId: !Ref PublicSubnet2
@@ -198,14 +213,15 @@ Resources:
 
   PrivateRouteTable1:
     Type: AWS::EC2::RouteTable
+    DeletionPolicy: Retain
     Properties:
       VpcId: !Ref VPC
       Tags:
       - Key: Name
-        Value: !Sub ${EnvironmentName} Private Routes (AZ1)
+        Value: !Sub ${EnvironmentName}_priv_rt1
 
   DefaultPrivateRoute1:
-    Condition: PrivateSubnets
+  #  Condition: PrivateSubnets
     Type: AWS::EC2::Route
     Properties:
       RouteTableId: !Ref PrivateRouteTable1
@@ -214,28 +230,31 @@ Resources:
 
   PrivateSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
+    DeletionPolicy: Retain
     Properties:
       RouteTableId: !Ref PrivateRouteTable1
       SubnetId: !Ref PrivateSubnet1
 
   PrivateRouteTable2:
     Type: AWS::EC2::RouteTable
+    DeletionPolicy: Retain
     Properties:
       VpcId: !Ref VPC
       Tags:
       - Key: Name
-        Value: !Sub ${EnvironmentName} Private Routes (AZ2)
+        Value: !Sub ${EnvironmentName}_priv_rt2
 
   DefaultPrivateRoute2:
-    Condition: PrivateSubnets
+  #  Condition: PrivateSubnets
     Type: AWS::EC2::Route
     Properties:
       RouteTableId: !Ref PrivateRouteTable2
       DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !If [HASetup, !Ref NatGateway2, !Ref NatGateway1]
+      NatGatewayId: !Ref NatGateway2
 
   PrivateSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
+    DeletionPolicy: Retain
     Properties:
       RouteTableId: !Ref PrivateRouteTable2
       SubnetId: !Ref PrivateSubnet2
@@ -244,27 +263,48 @@ Outputs:
   VPC:
     Description: A reference to the created VPC
     Value: !Ref VPC
+    Export:
+      Name:
+        'Fn::Sub': '${AWS::StackName}-VPC'
 
   PublicSubnets:
     Description: A list of the public subnets
     Value: !Join [ ",", [ !Ref PublicSubnet1, !Ref PublicSubnet2 ] ]
+    Export:
+      Name:
+        'Fn::Sub': '${AWS::StackName}-PublicSubnets'
 
   PrivateSubnets:
     Description: A list of the private subnets
     Value: !Join [ ",", [ !Ref PrivateSubnet1, !Ref PrivateSubnet2 ] ]
+    Export:
+      Name:
+        'Fn::Sub': '${AWS::StackName}-PrivateSubnets'
 
   PublicSubnet1:
     Description: A reference to the public subnet in the 1st Availability Zone
     Value: !Ref PublicSubnet1
+    Export:
+      Name:
+        'Fn::Sub': '${AWS::StackName}-PublicSubnet1'
 
   PublicSubnet2:
     Description: A reference to the public subnet in the 2nd Availability Zone
     Value: !Ref PublicSubnet2
+    Export:
+      Name:
+        'Fn::Sub': '${AWS::StackName}-PublicSubnet2'
 
   PrivateSubnet1:
     Description: A reference to the private subnet in the 1st Availability Zone
     Value: !Ref PrivateSubnet1
+    Export:
+      Name:
+        'Fn::Sub': '${AWS::StackName}-PrivateSubnet1'
 
   PrivateSubnet2:
     Description: A reference to the private subnet in the 2nd Availability Zone
     Value: !Ref PrivateSubnet2
+    Export:
+      Name:
+        'Fn::Sub': '${AWS::StackName}-PrivateSubnet2'
