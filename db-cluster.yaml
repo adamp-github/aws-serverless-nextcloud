@@ -19,33 +19,47 @@ Description: Aurora Serverless DB
 Parameters:
   DbUserName:
     Type: String
-  DbPassword:
-    Type: String
-    NoEcho: True
+    Default: "nextclouddb"
+#  DbPassword:
+#    Type: String
+#    NoEcho: True
   DbName:
     Type: String
+    Default: "nextclouddb"
+  DbClusterName:
+    Type: String
+    Default: "nextcloudcluster"
   DbMinCapacity:
     Type: Number
+    Default: '2'
   DbMaxCapacity:
     Type: Number
-  PrivateSubnets:
-    Type: String
-  VpcId:
-    Type: String
+    Default: '8'
+ # PrivateSubnets:
+ #   Type: String
+ #   Default: !ImportValue VpcStack.Outputs.PrivateSubnets
+ # VpcId:
+ #   Type: String
   FargateSecGroupId:
     Type: String
+    Default: 'sg-0f6ddbb66dc7ad7a0'
 
 Resources:
+
   RdsSubnetGroup:
     Type: "AWS::RDS::DBSubnetGroup"
     Properties:
       DBSubnetGroupDescription: description
-      SubnetIds: !Split [',', !Ref PrivateSubnets]
+      SubnetIds: !Split [',', !ImportValue 'x--v--x-prod-vpc-PrivateSubnets']
+      #'!Split [',', !Ref PrivateSubnets]
+
   PostgresRdsSecurityGroup:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
       GroupDescription: ECS Security Group
-      VpcId: !Ref VpcId
+      VpcId: !ImportValue 'x--v--x-prod-vpc-VPC'
+      #!Ref VpcId
+
   PostgresRdsSecurityGroupPostgresInboundFargate:
     Type: 'AWS::EC2::SecurityGroupIngress'
     Properties:
@@ -54,35 +68,40 @@ Resources:
       FromPort: '5432'
       ToPort: '5432'
       SourceSecurityGroupId: !Ref FargateSecGroupId
+
   PostgresRdsCluster:
-    Type: "AWS::RDS::DBCluster"
+    Type: 'AWS::RDS::DBCluster'
     Properties:
       DBClusterParameterGroupName:
         Ref: PostgresRdsClusterParameterGroup
       DBSubnetGroupName:
         Ref: RdsSubnetGroup
       DatabaseName: !Ref DbName
+      DBClusterIdentifier: !Ref DbClusterName
       Engine: aurora-postgresql
-      EngineMode: serverless
-      EngineVersion: 10.2
+#      EngineMode: serverless
+      EngineVersion: '14.6'
       Port: 5432
-      StorageEncrypted: true
-      ScalingConfiguration:
-        AutoPause: true
+      ServerlessV2ScalingConfiguration:
         MinCapacity: !Ref DbMinCapacity
         MaxCapacity: !Ref DbMaxCapacity
-        SecondsUntilAutoPause: 3600
       VpcSecurityGroupIds:
       - !Ref PostgresRdsSecurityGroup
-      MasterUserPassword:
-        Ref: DbPassword
-      MasterUsername:
-        Ref: DbUserName
+      MasterUserPassword: '{{resolve:ssm-secure:DBPassword}}'
+      MasterUsername: !Ref DbUserName
+
+  PostgresRdsInstance:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+        Engine: aurora-postgresql
+        DBInstanceClass: db.serverless
+        DBClusterIdentifier: !Ref PostgresRdsCluster
+
   PostgresRdsClusterParameterGroup:
-    Type: "AWS::RDS::DBClusterParameterGroup"
+    Type: 'AWS::RDS::DBClusterParameterGroup'
     Properties:
       Description: "CloudFormation Aurora Cluster Parameter Group"
-      Family: aurora-postgresql10
+      Family: aurora-postgresql14
       Parameters:
         timezone: UTC
 
