@@ -72,7 +72,7 @@ Parameters:
   Route53Zone:
     Description: Route53 Public Hosted Zone ID to configure custom domain
     Type: String
-    Default: ""
+    Default: "Z00954413LOLMBR4VSVL"
   Domain:
     Description: Speficy a full quallified domain name to use with this Nextcloud deployment
     Type: String
@@ -115,7 +115,7 @@ Parameters:
   NextCloudVersion:
     Description: Nextcloud Version to be deployed (no downgrade possible)
     Type: String
-    Default: 23.0.1
+    Default: 25.0.3
   S3SecretRotationSerial:
     Description: In order to rotate long-term S3 credentials increase by 1
     Type: Number
@@ -131,7 +131,7 @@ Parameters:
   EcsCapacityProvider:
     Description: Optional select Spot Fargate Tasks for Development Environments
     Type: String
-    Default: FARGATE
+    Default: FARGATE_SPOT
     AllowedValues:
     - FARGATE_SPOT
     - FARGATE
@@ -160,7 +160,7 @@ Parameters:
   EcsMaxCapacity:
     Description: Maximum number of ECS Containers to provision
     Type: Number
-    Default: 25
+    Default: 5
   EcsTargetCpuUtilization:
     Description: Threshold to be reached for scaling in/out
     Type: Number
@@ -172,7 +172,7 @@ Parameters:
   RedisTshirtSize:
     Description: ElasticCache Redis Node Size
     Type: String
-    Default: cache.t3.small
+    Default: cache.t3.micro
     AllowedValues:
     - cache.t3.micro
     - cache.t3.small
@@ -202,29 +202,29 @@ Conditions:
   PrivateSubnets: !Not [!Equals [!Ref IsolationLevel, Public]]
 
 Resources:
-  VpcStack:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      TemplateURL: ./simplevpc.yaml
-      TimeoutInMinutes: 60
-      Parameters:
-        EnvironmentName: !Ref DeploymentName
-        IsolationLevel: !Ref IsolationLevel
-
-  RdsStack:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      TemplateURL: ./db-cluster.yaml
-      TimeoutInMinutes: 60
-      Parameters:
-        DbUserName: !Ref DbUserName
-        DbPassword: !Ref DbPassword
-        DbName: nextcloud
-        DbMinCapacity: !Ref DbMinCapacity
-        DbMaxCapacity: !Ref DbMaxCapacity
-        PrivateSubnets: !GetAtt VpcStack.Outputs.PrivateSubnets
-        VpcId: !GetAtt VpcStack.Outputs.VPC
-        FargateSecGroupId: !Ref EcsSecurityGroup
+#  VpcStack:
+#    Type: AWS::CloudFormation::Stack
+#    Properties:
+#      TemplateURL: ./simplevpc.yaml
+#      TimeoutInMinutes: 60
+#      Parameters:
+#        EnvironmentName: !Ref DeploymentName
+#        IsolationLevel: !Ref IsolationLevel
+#
+#  RdsStack:
+#    Type: AWS::CloudFormation::Stack
+#    Properties:
+#      TemplateURL: ./db-cluster.yaml
+#      TimeoutInMinutes: 60
+#      Parameters:
+#        DbUserName: !Ref DbUserName
+#        DbPassword: !Ref DbPassword
+#        DbName: nextcloud
+#        DbMinCapacity: !Ref DbMinCapacity
+#        DbMaxCapacity: !Ref DbMaxCapacity
+#        PrivateSubnets: !GetAtt VpcStack.Outputs.PrivateSubnets
+#        VpcId: !GetAtt VpcStack.Outputs.VPC
+#        FargateSecGroupId: !Ref EcsSecurityGroup
 
   EcsCluster:
     Type: 'AWS::ECS::Cluster'
@@ -240,7 +240,7 @@ Resources:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
       GroupDescription: ECS Security Group
-      VpcId: !GetAtt VpcStack.Outputs.VPC
+      VpcId: !ImportValue VpcStack.Outputs.VPC
 
   EcsSecurityGroupHTTPinbound:
     Type: 'AWS::EC2::SecurityGroupIngress'
@@ -311,7 +311,7 @@ Resources:
     Properties:
       FileSystemId:
         Ref: Efs
-      SubnetId: !Select [0, !Split [ ',', !GetAtt VpcStack.Outputs.PrivateSubnets ]]
+      SubnetId: !Select [0, !Split [ ',', !ImportValue VpcStack.Outputs.PrivateSubnets ]]
       SecurityGroups:
       - Ref: "EfsSecurityGroup"
   EfsMountTarget2:
@@ -319,7 +319,7 @@ Resources:
     Properties:
       FileSystemId:
         Ref: Efs
-      SubnetId: !Select [ 1, !Split [ ',', !GetAtt VpcStack.Outputs.PrivateSubnets ] ]
+      SubnetId: !Select [ 1, !Split [ ',', !ImportValue VpcStack.Outputs.PrivateSubnets ] ]
       SecurityGroups:
       - Ref: "EfsSecurityGroup"
   EfsAPNextcloud:
@@ -366,7 +366,7 @@ Resources:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
       GroupDescription: ECS Security Group
-      VpcId: !GetAtt VpcStack.Outputs.VPC
+      VpcId: !ImportValue VpcStack.Outputs.VPC
 
   EfsSecurityGroupNFSinbound:
     Type: 'AWS::EC2::SecurityGroupIngress'
@@ -407,7 +407,7 @@ Resources:
         - Name: POSTGRES_PASSWORD
           Value: !Ref DbPassword
         - Name: POSTGRES_HOST
-          Value: !GetAtt RdsStack.Outputs.EndpointUrl
+          Value: !ImportValue RdsStack.Outputs.EndpointUrl
         - Name: NEXTCLOUD_TRUSTED_DOMAINS
           Value:
             Fn::Sub:
@@ -801,11 +801,11 @@ Resources:
       CacheParameterGroupName: !Ref RedisParameterGroup
       CacheSubnetGroupName: !Ref RedisSubnetGroup
       Engine: redis
-      EngineVersion: 6.x
-#      NumNodeGroups: 1
-#      ReplicasPerNodeGroup: 1
-#      NodeGroupConfiguration:
-#      - ReplicaCount: 1
+      EngineVersion: 7.0
+      NumNodeGroups: 1
+      ReplicasPerNodeGroup: 1
+      NodeGroupConfiguration:
+      - ReplicaCount: 1
       PreferredMaintenanceWindow: 'sat:07:00-sat:08:00'
       SecurityGroupIds:
       - !GetAtt
