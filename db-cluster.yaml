@@ -32,9 +32,9 @@ Parameters:
   DbMaxCapacity:
     Type: Number
     Default: '8'
-  FargateSecGroupId:
-    Type: String
-    Default: 'sg-0f6ddbb66dc7ad7a0'
+#  FargateSecGroupId:
+#    Type: String
+#    Default: 'sg-0f6ddbb66dc7ad7a0'
 
 Resources:
 
@@ -50,14 +50,23 @@ Resources:
       GroupDescription: ECS Security Group
       VpcId: !ImportValue 'x--v--x-prod-vpc-VPC'
 
-  PostgresRdsSecurityGroupPostgresInboundFargate:
+  PostgresRdsSecurityGroupPostgresInboundFargate1:
     Type: 'AWS::EC2::SecurityGroupIngress'
     Properties:
       GroupId: !Ref PostgresRdsSecurityGroup
       IpProtocol: tcp
       FromPort: '5432'
       ToPort: '5432'
-      SourceSecurityGroupId: !Ref FargateSecGroupId
+      CidrIp: !ImportValue 'x--v--x-prod-vpc-PrivateSubnet1CIDR'
+
+  PostgresRdsSecurityGroupPostgresInboundFargate2:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !Ref PostgresRdsSecurityGroup
+      IpProtocol: tcp
+      FromPort: '5432'
+      ToPort: '5432'
+      CidrIp: !ImportValue 'x--v--x-prod-vpc-PrivateSubnet2CIDR'
 
   PostgresRdsCluster:
     Type: 'AWS::RDS::DBCluster'
@@ -97,8 +106,19 @@ Resources:
 Outputs:
   DBIdentifier:
     Value: !Ref PostgresRdsCluster
+    Export:
+      Name:
+        'Fn::Sub': '${AWS::StackName}-DBIdentifier'
+
   EndpointUrl:
     Value: !GetAtt PostgresRdsCluster.Endpoint.Address
+    Export:
+      Name:
+        'Fn::Sub': '${AWS::StackName}-EndpointUrl'
+
   EndpointPort:
     Value: !GetAtt PostgresRdsCluster.Endpoint.Port
+    Export:
+      Name:
+        'Fn::Sub': '${AWS::StackName}-EndpointPort'
 
