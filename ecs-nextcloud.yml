@@ -76,33 +76,33 @@ Parameters:
   Domain:
     Description: Speficy a full quallified domain name to use with this Nextcloud deployment
     Type: String
-    Default: ""
+    Default: "nextcloud.x--v--x.com"
   DbUserName:
     Description: Database Master Username
     Type: String
     AllowedPattern: ^[a-zA-Z0-9]{6,32}
-    Default: nextcloud
-  DbPassword:
-    Description: Database Master Password
-    Type: String
-    NoEcho: True
+    Default: nextclouddb
+#  DbPassword:
+#    Description: Database Master Password
+#    Type: String
+#    NoEcho: True
   DbMinCapacity:
     Description: Minimal Aurora Capacity Units Provisioned
     Type: Number
-    MinValue: 2
+    MinValue: 0.5
     MaxValue: 384
-    Default: 2
+    Default: 0.5
   DbMaxCapacity:
     Description: Maxmimal Aurora Capacity Units Provisioned
     Type: Number
-    MinValue: 2
+    MinValue: 0.5
     MaxValue: 384
     Default: 8
   NextCloudAdminUser:
     Description: Initial Nextcloud Admin User
     Type: String
     AllowedPattern: ^[a-zA-Z0-9]{6,32}
-    Default: ncadmin
+    Default: nextcloud
   NextCloudAdminPassword:
     Description: Initial Nextcloud Admin Password (change after first login)
     Type: String
@@ -111,11 +111,11 @@ Parameters:
     Description: Nextcloud Database Name
     Type: String
     AllowedPattern: ^[a-zA-Z0-9]{6,32}
-    Default: nextcloud
+    Default: nextclouddb
   NextCloudVersion:
     Description: Nextcloud Version to be deployed (no downgrade possible)
     Type: String
-    Default: 25.0.3
+    Default: 25.0.4
   S3SecretRotationSerial:
     Description: In order to rotate long-term S3 credentials increase by 1
     Type: Number
@@ -240,7 +240,7 @@ Resources:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
       GroupDescription: ECS Security Group
-      VpcId: !ImportValue VpcStack.Outputs.VPC
+      VpcId: !ImportValue 'x--v--x-prod-vpc-VPC'
 
   EcsSecurityGroupHTTPinbound:
     Type: 'AWS::EC2::SecurityGroupIngress'
@@ -311,7 +311,7 @@ Resources:
     Properties:
       FileSystemId:
         Ref: Efs
-      SubnetId: !Select [0, !Split [ ',', !ImportValue VpcStack.Outputs.PrivateSubnets ]]
+      SubnetId: !Select [0, !Split [ ',', !ImportValue 'x--v--x-prod-vpc-PrivateSubnets' ]]
       SecurityGroups:
       - Ref: "EfsSecurityGroup"
   EfsMountTarget2:
@@ -319,7 +319,7 @@ Resources:
     Properties:
       FileSystemId:
         Ref: Efs
-      SubnetId: !Select [ 1, !Split [ ',', !ImportValue VpcStack.Outputs.PrivateSubnets ] ]
+      SubnetId: !Select [ 1, !Split [ ',', !ImportValue 'x--v--x-prod-vpc-PrivateSubnets' ] ]
       SecurityGroups:
       - Ref: "EfsSecurityGroup"
   EfsAPNextcloud:
@@ -366,7 +366,7 @@ Resources:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
       GroupDescription: ECS Security Group
-      VpcId: !ImportValue VpcStack.Outputs.VPC
+      VpcId: !ImportValue 'x--v--x-prod-vpc-VPC'
 
   EfsSecurityGroupNFSinbound:
     Type: 'AWS::EC2::SecurityGroupIngress'
@@ -383,7 +383,7 @@ Resources:
       Family: !Join
       - ''
       - - !Ref 'AWS::StackName'
-        - '-ecs-nextcloud'
+        - '-nextcloud'
       NetworkMode: awsvpc
       RequiresCompatibilities:
       - "FARGATE"
@@ -393,6 +393,8 @@ Resources:
       Memory: !Ref EcsTaskMem
       ContainerDefinitions:
       - Name: nextcloud
+        LinuxParameters:
+          InitProcessEnabled: true
         LogConfiguration:
           LogDriver: awslogs
           Options:
@@ -405,9 +407,9 @@ Resources:
         - Name: POSTGRES_USER
           Value: !Ref DbUserName
         - Name: POSTGRES_PASSWORD
-          Value: !Ref DbPassword
+          Value: "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/DBPassword"
         - Name: POSTGRES_HOST
-          Value: !ImportValue RdsStack.Outputs.EndpointUrl
+          Value: !ImportValue 'x--v--x-prod-db-EndpointUrl'
         - Name: NEXTCLOUD_TRUSTED_DOMAINS
           Value:
             Fn::Sub:
@@ -444,7 +446,7 @@ Resources:
           SourceVolume: config
         - ContainerPath: "/var/www/html/data"
           SourceVolume: data
-        Image: !Sub nextcloud:${NextCloudVersion}-apache
+        Image: !Sub public.ecr.aws/docker/library/nextcloud:${NextCloudVersion}-apache:latest
         Essential: true
       Volumes:
       - Name: nextcloud
@@ -488,7 +490,7 @@ Resources:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
       GroupDescription: ELB Security Group
-      VpcId: !GetAtt VpcStack.Outputs.VPC
+      VpcId: !ImportValue 'x--v--x-prod-vpc-VPC'
 
   ElbSecurityGroupHTTPSinbound:
     Type: 'AWS::EC2::SecurityGroupIngress'
@@ -513,7 +515,7 @@ Resources:
       LoadBalancerAttributes:
       - Key: idle_timeout.timeout_seconds
         Value: '30'
-      Subnets: !Split [ ',', !GetAtt VpcStack.Outputs.PublicSubnets ]
+      Subnets: !Split [ ',', !ImportValue 'x--v--x-prod-vpc-PublicSubnets' ]
       SecurityGroups:
       - !Ref ElbSecurityGroup
   Route53AliasRecord:
@@ -581,7 +583,7 @@ Resources:
     DependsOn: ElasticLoadBalancer
     Properties:
       HealthCheckIntervalSeconds: 10 # This might be keeping the Serverless RDS awake
-      HealthCheckPath: /status.php
+      HealthCheckPath: /index.php
       HealthCheckProtocol: HTTP
       HealthCheckTimeoutSeconds: 5
       HealthyThresholdCount: 2
@@ -590,7 +592,7 @@ Resources:
       Matcher:
         HttpCode: 200,400
       UnhealthyThresholdCount: 2
-      VpcId: !GetAtt VpcStack.Outputs.VPC
+      VpcId: !ImportValue 'x--v--x-prod-vpc-VPC'
       TargetType: ip
       TargetGroupAttributes:
       - Key: deregistration_delay.timeout_seconds
@@ -614,12 +616,13 @@ Resources:
       DeploymentConfiguration:
         MaximumPercent: 100
         MinimumHealthyPercent: 0 # Allows service interruption rather than scaling up
+      EnableExecuteCommand: true
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: !If [PrivateSubnets, DISABLED, ENABLED]
           SecurityGroups:
           - !Ref EcsSecurityGroup
-          Subnets: !Split [ ',', !If [PrivateSubnets, !GetAtt VpcStack.Outputs.PrivateSubnets, !GetAtt VpcStack.Outputs.PublicSubnets] ]
+          Subnets: !Split [ ',', !If [PrivateSubnets, !ImportValue 'x--v--x-prod-vpc-PrivateSubnets', !ImportValue 'x--v--x-prod-vpc-PublicSubnets'] ]
       HealthCheckGracePeriodSeconds: 2500
       LoadBalancers:
       - ContainerName: 'nextcloud'
@@ -733,6 +736,19 @@ Resources:
             Action:
             - s3:GetBucketLocation
             Resource: arn:aws:s3:::*
+          - Effect: Allow
+            Action:
+            - ssm:GetParameters
+            - kms:Decrypt
+            Resource: "*"
+          - Effect: Allow
+            Action:
+            - "ssmmessages:CreateControlChannel"
+            - "ssmmessages:CreateDataChannel"
+            - "ssmmessages:OpenControlChannel"
+            - "ssmmessages:OpenDataChannel"
+            Resource: "*"
+
 
   Ec2NcRole:
     Type: 'AWS::IAM::Role'
@@ -767,7 +783,7 @@ Resources:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
       GroupDescription: Elasticache Security Group
-      VpcId: !GetAtt VpcStack.Outputs.VPC
+      VpcId: !ImportValue 'x--v--x-prod-vpc-VPC'
   RedisSecurityGroupinbound:
     Type: 'AWS::EC2::SecurityGroupIngress'
     Properties:
@@ -780,12 +796,12 @@ Resources:
     Type: 'AWS::ElastiCache::SubnetGroup'
     Properties:
       Description: Redis Subnet Group
-      SubnetIds: !Split [ ',', !GetAtt VpcStack.Outputs.PrivateSubnets]
+      SubnetIds: !Split [ ',', !ImportValue 'x--v--x-prod-vpc-PrivateSubnets']
   RedisParameterGroup:
     Type: AWS::ElastiCache::ParameterGroup
     Properties:
       Description: nextcloud param group
-      CacheParameterGroupFamily: redis6.x
+      CacheParameterGroupFamily: redis7
       Properties:
         cluster-enabled: 'no'
   RedisReplicationGroup:
@@ -802,10 +818,10 @@ Resources:
       CacheSubnetGroupName: !Ref RedisSubnetGroup
       Engine: redis
       EngineVersion: 7.0
-      NumNodeGroups: 1
-      ReplicasPerNodeGroup: 1
-      NodeGroupConfiguration:
-      - ReplicaCount: 1
+#      NumNodeGroups: 1
+#      ReplicasPerNodeGroup: 1
+#      NodeGroupConfiguration:
+#      - ReplicaCount: 1
       PreferredMaintenanceWindow: 'sat:07:00-sat:08:00'
       SecurityGroupIds:
       - !GetAtt
@@ -892,42 +908,6 @@ Resources:
                             [ "AWS/ECS", "MemoryUtilization", "ServiceName", "${EcsService.Name}", "ClusterName", "${EcsCluster}" ]
                         ],
                         "title": "ECS-MemoryUtilization"
-                    }
-                },
-                {
-                    "height": 6,
-                    "width": 12,
-                    "y": 6,
-                    "x": 0,
-                    "type": "metric",
-                    "properties": {
-                        "view": "timeSeries",
-                        "stacked": false,
-                        "region": "${AWS::Region}",
-                        "stat": "Average",
-                        "period": 300,
-                        "metrics": [
-                            [ "AWS/RDS", "CPUUtilization", "DBClusterIdentifier", "${RdsStack.Outputs.DBIdentifier}" ]
-                        ],
-                        "title": "RDS-CPUUtilization"
-                    }
-                },
-                {
-                    "height": 6,
-                    "width": 12,
-                    "y": 6,
-                    "x": 12,
-                    "type": "metric",
-                    "properties": {
-                        "view": "timeSeries",
-                        "stacked": false,
-                        "region": "${AWS::Region}",
-                        "stat": "Average",
-                        "period": 300,
-                        "metrics": [
-                            [ "AWS/RDS", "DatabaseConnections", "DBClusterIdentifier", "${RdsStack.Outputs.DBIdentifier}" ]
-                        ],
-                        "title": "DatabaseConnections"
                     }
                 },
                 {
@@ -1058,3 +1038,41 @@ Outputs:
   CustomUrl:
     Condition: CustomDomain
     Value: !Sub https://${Domain}
+
+#
+#                {
+#                    "height": 6,
+#                    "width": 12,
+#                    "y": 6,
+#                    "x": 0,
+#                    "type": "metric",
+#                    "properties": {
+#                        "view": "timeSeries",
+#                        "stacked": false,
+#                        "region": "${AWS::Region}",
+#                        "stat": "Average",
+#                        "period": 300,
+#                        "metrics": [
+#                            [ "AWS/RDS", "CPUUtilization", "DBClusterIdentifier", "${RdsStack.Outputs.DBIdentifier}" ]
+#                        ],
+#                        "title": "RDS-CPUUtilization"
+#                    }
+#                },
+#                {
+#                    "height": 6,
+#                    "width": 12,
+#                    "y": 6,
+#                    "x": 12,
+#                    "type": "metric",
+#                    "properties": {
+#                        "view": "timeSeries",
+#                        "stacked": false,
+#                        "region": "${AWS::Region}",
+#                        "stat": "Average",
+#                        "period": 300,
+#                        "metrics": [
+#                            [ "AWS/RDS", "DatabaseConnections", "DBClusterIdentifier", "${RdsStack.Outputs.DBIdentifier}" ]
+#                        ],
+#                        "title": "DatabaseConnections"
+#                    }
+#                },
