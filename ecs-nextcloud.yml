@@ -172,23 +172,11 @@ Parameters:
   RedisTshirtSize:
     Description: ElasticCache Redis Node Size
     Type: String
-    Default: cache.t3.micro
+    Default: cache.t4g.micro
     AllowedValues:
-    - cache.t3.micro
-    - cache.t3.small
-    - cache.t3.medium
-    - cache.m5.large
-    - cache.m5.xlarge
-    - cache.m5.2xlarge
-    - cache.m5.4xlarge
-    - cache.m5.12xlarge
-    - cache.m5.24xlarge
-    - cache.r5.large
-    - cache.r5.xlarge
-    - cache.r5.2xlarge
-    - cache.r5.4xlarge
-    - cache.r5.12xlarge
-    - cache.r5.24xlarge
+    - cache.t4g.micro
+    - cache.t4g.small
+    - cache.t4g.medium
 
 Mappings:
   Config:
@@ -407,7 +395,7 @@ Resources:
         - Name: POSTGRES_USER
           Value: !Ref DbUserName
         - Name: POSTGRES_PASSWORD
-          Value: "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/DBPassword"
+          valueFrom: "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/DBPassword"
         - Name: POSTGRES_HOST
           Value: !ImportValue 'x--v--x-prod-db-EndpointUrl'
         - Name: NEXTCLOUD_TRUSTED_DOMAINS
@@ -446,7 +434,7 @@ Resources:
           SourceVolume: config
         - ContainerPath: "/var/www/html/data"
           SourceVolume: data
-        Image: !Sub public.ecr.aws/docker/library/nextcloud:${NextCloudVersion}-apache:latest
+        Image: !Sub public.ecr.aws/docker/library/nextcloud:${NextCloudVersion}-apache
         Essential: true
       Volumes:
       - Name: nextcloud
@@ -681,6 +669,13 @@ Resources:
             - !Sub arn:aws:elasticfilesystem:${AWS::Region}:${AWS::AccountId}:access-point/${EfsAPConfig}
             - !Sub arn:aws:elasticfilesystem:${AWS::Region}:${AWS::AccountId}:access-point/${EfsAPApps}
             - !Sub arn:aws:elasticfilesystem:${AWS::Region}:${AWS::AccountId}:access-point/${EfsAPData}
+          - Effect: Allow
+            Action:
+            - "ssmmessages:CreateControlChannel"
+            - "ssmmessages:CreateDataChannel"
+            - "ssmmessages:OpenControlChannel"
+            - "ssmmessages:OpenDataChannel"
+            Resource: "*"
 
   ECSTaskExecRole:
     Type: 'AWS::IAM::Role'
