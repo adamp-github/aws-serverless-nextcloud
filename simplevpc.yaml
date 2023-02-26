@@ -210,7 +210,6 @@ Resources:
       RouteTableId: !Ref PublicRouteTable
       SubnetId: !Ref PublicSubnet2
 
-
   PrivateRouteTable1:
     Type: AWS::EC2::RouteTable
     DeletionPolicy: Retain
@@ -258,7 +257,7 @@ Resources:
     Properties:
       RouteTableId: !Ref PrivateRouteTable2
       SubnetId: !Ref PrivateSubnet2
-
+      
 Outputs:
   VPC:
     Description: A reference to the created VPC
@@ -308,3 +307,17 @@ Outputs:
     Export:
       Name:
         'Fn::Sub': '${AWS::StackName}-PrivateSubnet2'
+
+  PrivateSubnetCIDR1:
+    Description: An IP range to the private subnet in the 1st Availability Zone
+    Value: !Ref PrivateSubnet1CIDR
+    Export:
+      Name:
+        'Fn::Sub': '${AWS::StackName}-PrivateSubnet1CIDR'
+
+  PrivateSubnetCIDR2:
+    Description: An IP range to the private subnet in the 2nd Availability Zone
+    Value: !Ref PrivateSubnet2CIDR
+    Export:
+      Name:
+        'Fn::Sub': '${AWS::StackName}-PrivateSubnet2CIDR'
